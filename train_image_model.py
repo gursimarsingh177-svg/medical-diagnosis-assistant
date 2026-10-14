@@ -1,13 +1,13 @@
-from pathlib import Path
-
 import tensorflow as tf
-from tensorflow.keras import layers, models
-from tensorflow.keras.applications import MobileNetV2
+
+from keras import layers, models
+from keras.applications import MobileNetV2
+from keras.applications.mobilenet_v2 import preprocess_input
 
 
-# ==========================================
-# 1. SETTINGS
-# ==========================================
+# =========================================================
+# SETTINGS
+# =========================================================
 
 IMAGE_SIZE = (224, 224)
 BATCH_SIZE = 32
@@ -16,114 +16,145 @@ EPOCHS = 5
 TRAIN_DIR = "dataset/chest_xray/train"
 VAL_DIR = "dataset/chest_xray/val"
 
+MODEL_PATH = "models/chest_xray_model.keras"
 
-# ==========================================
-# 2. LOAD TRAINING DATA
-# ==========================================
+
+# =========================================================
+# LOAD TRAINING DATA
+# =========================================================
 
 train_ds = tf.keras.utils.image_dataset_from_directory(
     TRAIN_DIR,
     image_size=IMAGE_SIZE,
     batch_size=BATCH_SIZE,
-    label_mode="binary"
+    label_mode="binary",
+    shuffle=True,
+    seed=42,
 )
 
 
-# ==========================================
-# 3. LOAD VALIDATION DATA
-# ==========================================
+# =========================================================
+# LOAD VALIDATION DATA
+# =========================================================
 
 val_ds = tf.keras.utils.image_dataset_from_directory(
     VAL_DIR,
     image_size=IMAGE_SIZE,
     batch_size=BATCH_SIZE,
-    label_mode="binary"
+    label_mode="binary",
+    shuffle=False,
 )
 
 
-# ==========================================
-# 4. DATA AUGMENTATION
-# ==========================================
+# =========================================================
+# PRINT CLASS NAMES
+# =========================================================
 
-data_augmentation = tf.keras.Sequential([
-    layers.RandomFlip("horizontal"),
-    layers.RandomRotation(0.05),
-    layers.RandomZoom(0.1),
-])
+print("\nClass names:")
+print(train_ds.class_names)
 
 
-# ==========================================
-# 5. PRETRAINED MODEL
-# ==========================================
+# =========================================================
+# DATA AUGMENTATION
+# =========================================================
+
+data_augmentation = tf.keras.Sequential(
+    [
+        layers.RandomFlip("horizontal"),
+        layers.RandomRotation(0.05),
+        layers.RandomZoom(0.1),
+    ],
+    name="data_augmentation",
+)
+
+
+# =========================================================
+# LOAD PRETRAINED MOBILENETV2
+# =========================================================
 
 base_model = MobileNetV2(
     input_shape=(224, 224, 3),
     include_top=False,
-    weights="imagenet"
+    weights="imagenet",
 )
 
-# Freeze pretrained layers initially
+
+# Freeze pretrained layers
 base_model.trainable = False
 
 
-# ==========================================
-# 6. BUILD OUR MODEL
-# ==========================================
+# =========================================================
+# BUILD MODEL
+# =========================================================
 
-model = models.Sequential([
-    data_augmentation,
+inputs = layers.Input(
+    shape=(224, 224, 3),
+    name="image_input",
+)
 
-    layers.Rescaling(1.0 / 255),
+# Data augmentation
+x = data_augmentation(inputs)
 
-    base_model,
+# MobileNetV2 preprocessing
+x = preprocess_input(x)
 
-    layers.GlobalAveragePooling2D(),
+# Feature extraction
+x = base_model(
+    x,
+    training=False,
+)
 
-    layers.Dropout(0.2),
+# Convert feature maps to a vector
+x = layers.GlobalAveragePooling2D()(x)
 
-    layers.Dense(1, activation="sigmoid")
-])
+# Reduce overfitting
+x = layers.Dropout(0.2)(x)
+
+# Binary classification
+outputs = layers.Dense(
+    1,
+    activation="sigmoid",
+    name="pneumonia_output",
+)(x)
 
 
-# ==========================================
-# 7. COMPILE
-# ==========================================
-
-model.compile(
-    optimizer="adam",
-    loss="binary_crossentropy",
-    metrics=["accuracy"]
+model = models.Model(
+    inputs=inputs,
+    outputs=outputs,
+    name="medical_xray_mobilenetv2",
 )
 
 
-# ==========================================
-# 8. DISPLAY MODEL
-# ==========================================
+# =========================================================
+# COMPILE MODEL
+# =========================================================
+
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(
+        learning_rate=0.001
+    ),
+    loss="binary_crossentropy",
+    metrics=["accuracy"],
+)
+
+
+# =========================================================
+# DISPLAY MODEL
+# =========================================================
+
+print("\nModel Summary:\n")
 
 model.summary()
 
 
-# ==========================================
-# 9. TRAIN
-# ==========================================
+# =========================================================
+# TRAIN MODEL
+# =========================================================
+
+print("\nStarting training...\n")
 
 history = model.fit(
     train_ds,
     validation_data=val_ds,
-    epochs=EPOCHS
+    epochs=EPOCHS,
 )
-
-
-# ==========================================
-# 10. SAVE MODEL
-# ==========================================
-
-project_root = Path(__file__).resolve().parent
-model_dir = project_root / "models"
-model_dir.mkdir(exist_ok=True)
-
-model_path = model_dir / "chest_xray_model.keras"
-model.save(model_path)
-
-print("\nModel training completed.")
-print(f"Saved to: {model_path}")
