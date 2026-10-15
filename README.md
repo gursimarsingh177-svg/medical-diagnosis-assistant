@@ -148,7 +148,7 @@ The symptom model's output scores are model estimates, not verified real-world p
 
 ## 👨‍💻 Author
 
-**GitHub:** https://github.com/YOUR-USERNAME
+**GitHub:** https://github.com/gursimarsingh177-svg/medical-diganosis-assistant
 
 ## 📄 License
 
