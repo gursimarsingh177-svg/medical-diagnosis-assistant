@@ -1,0 +1,8 @@
+streamlit
+tensorflow==2.21.0
+numpy
+pandas
+Pillow
+scikit-learn
+joblib
+reportlab
